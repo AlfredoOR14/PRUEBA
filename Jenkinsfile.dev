@@ -1,0 +1,48 @@
+env.RUTA_SOURCE = 'source'
+env.RUTA_SOURCE_FILES = 'src'
+
+env.GCP_NAME = 'ingesta-irene-tables-all'
+
+env.GCP_PROJECT_ID = 'sura-pe-dev-zona-cruda-415305'
+env.GCP_SERVICE_ACCOUNT = 'sa-ingesta-dataentry-dev@sura-pe-dev-zona-cruda-415305.iam.gserviceaccount.com'
+env.GCP_RUNTIME = 'python39'
+env.GCP_ENTRY_POINT = 'main'
+env.GCP_MEMORY = '20480'
+env.GCP_TIMEOUT = 540
+env.GCP_MAXINSTANCES = 2
+env.GCP_LOCATION = 'us-central1'
+
+node {
+    deleteDir()
+
+    stage('Descargar Fuentes') {
+        dir("${RUTA_SOURCE}") {
+            checkout scm
+        }
+    }
+
+    stage('Despliegue') {
+        dir("${RUTA_SOURCE}") {
+            withCredentials([file(credentialsId: 'sura-corporativo-gcp-devops-zona-cruda-dev', variable: 'SECRET')]) {
+                sh "gcloud auth activate-service-account --key-file=\$SECRET"
+                sh "gcloud config set project ${GCP_PROJECT_ID}"
+
+                // Desplegar la nueva función con invocaciones no autorizadas permitidas
+                sh """ gcloud alpha functions deploy ${GCP_NAME} \
+                    --gen2 \
+                    --region=${GCP_LOCATION} \
+                    --runtime=${GCP_RUNTIME} \
+                    --trigger-http \
+                    --memory ${GCP_MEMORY} \
+                    --entry-point ${GCP_ENTRY_POINT} \
+                    --timeout ${GCP_TIMEOUT} \
+                    --max-instances ${GCP_MAXINSTANCES} \
+                    --ingress-settings all \
+                    --service-account ${GCP_SERVICE_ACCOUNT} \
+                    --source=${RUTA_SOURCE_FILES} \
+                    --env-vars-file ${RUTA_SOURCE_FILES}/.env.yaml \
+                    --allow-unauthenticated """
+            }
+        }
+    }
+}
